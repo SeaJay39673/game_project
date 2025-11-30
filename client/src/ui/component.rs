@@ -238,7 +238,7 @@ impl UIComponent for UIComponentItem {
 
                     child.compute_layout(child_rect, window_size, queue);
 
-                    cy += child_rect.h;
+                    cy += child_rect.h / 2.0;
                 }
             }
             UIAlign::Horizontal => {

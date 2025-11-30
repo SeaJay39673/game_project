@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use serde::de;
 use winit::{
     application::ApplicationHandler,
     event::{StartCause, WindowEvent},
@@ -15,7 +16,7 @@ use winit::{
 use crate::{
     asset_ingestion::load_assets,
     engine::{Drawable, Graphics},
-    ui::{Menu, StartMenu, UIComponent, UIEvent, UIRect},
+    ui::{Menu, MenuEvent, PlayMenu, StartMenu, UIComponent, UIEvent, UIRect},
 };
 
 struct GameManager {
@@ -69,7 +70,7 @@ impl GameManager {
         }
     }
 
-    pub fn handle_cursor_location(&mut self, location: (f32,f32)) {
+    pub fn handle_cursor_location(&mut self, location: (f32, f32)) {
         self.cursor_location = location;
     }
 
@@ -153,10 +154,9 @@ impl ApplicationHandler for GameManager {
                     tile_bind_group_layout,
                     ..
                 } = graphics;
-                match StartMenu::new(device, queue, tile_bind_group_layout) {
+                let size = window.inner_size();
+                match StartMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
                     Ok(mut menu) => {
-                        let size = window.inner_size();
-                        menu.handle_resize(queue, size.width as f32, size.height as f32);
                         self.menu = Some(Box::new(menu));
                     }
                     Err(e) => {
@@ -208,7 +208,10 @@ impl ApplicationHandler for GameManager {
                 self.handle_cursor_location((position.x as f32, position.y as f32));
                 if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
                     let Graphics { queue, .. } = graphics;
-                    menu.handle_ui_event(UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1), queue);
+                    menu.handle_ui_event(
+                        UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1),
+                        queue,
+                    );
                 }
             }
             WindowEvent::MouseInput {
@@ -216,9 +219,37 @@ impl ApplicationHandler for GameManager {
                 state,
                 button,
             } => {
-                if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    let Graphics { queue, .. } = graphics;
-                    menu.handle_ui_event(UIEvent::MouseClicked { position: self.cursor_location, state, button }, queue);
+                if let (Some(window), Some(graphics), Some(menu)) = (& self.window, &mut self.graphics, &mut self.menu) {
+                    let Graphics {
+                        device,
+                        queue,
+                        tile_bind_group_layout,
+                        ..
+                    } = graphics;
+                    match menu.handle_ui_event(
+                        UIEvent::MouseClicked {
+                            position: self.cursor_location,
+                            state,
+                            button,
+                        },
+                        queue,
+                    ) {
+                        MenuEvent::PlayMenu => {
+                            let size = window.inner_size();
+                            match PlayMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
+                                Ok(menu) => self.menu = Some(Box::new(menu)),
+                                Err(e) => eprintln!("Could not create PlayMenu"),
+                            }
+                        }
+                        MenuEvent::StartMenu => {
+                            let size = window.inner_size();
+                            match StartMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
+                                Ok(menu) => self.menu = Some(Box::new(menu)),
+                                Err(e) => eprintln!("Could not create StartMenu"),
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             WindowEvent::MouseWheel {
