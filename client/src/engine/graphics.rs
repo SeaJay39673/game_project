@@ -1,11 +1,17 @@
-use std::sync::Arc;
+use std::{mem, sync::Arc};
 
 use wgpu::{
-    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BufferBindingType, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Instance, LoadOp, Operations, PipelineLayoutDescriptor, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, SamplerBindingType, ShaderModuleDescriptor, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureSampleType, TextureViewDescriptor, TextureViewDimension
+    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BufferAddress,
+    BufferBindingType, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Instance, LoadOp,
+    Operations, PipelineLayoutDescriptor, Queue, RenderPassColorAttachment, RenderPassDescriptor,
+    RenderPipeline, RequestAdapterOptions, SamplerBindingType, ShaderModuleDescriptor,
+    ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureSampleType,
+    TextureViewDescriptor, TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexStepMode,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::engine::{Drawable, VertexFloat32};
+use crate::engine::{Drawable, graphics_data::Vertex};
 
 use anyhow::{anyhow, bail};
 
@@ -63,7 +69,7 @@ impl Graphics {
             });
 
         let tile_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Uniform Bind Group Layout"),
+            label: Some("Tile Bind Group Layout"),
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -77,6 +83,16 @@ impl Graphics {
                 },
                 BindGroupLayoutEntry {
                     binding: 1,
+                    visibility: ShaderStages::VERTEX,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                BindGroupLayoutEntry {
+                    binding: 2,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Texture {
                         multisampled: false,
@@ -86,7 +102,7 @@ impl Graphics {
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    binding: 2,
+                    binding: 3,
                     visibility: ShaderStages::FRAGMENT,
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
@@ -106,7 +122,15 @@ impl Graphics {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[VertexFloat32::desc()],
+                buffers: &[VertexBufferLayout {
+                    array_stride: mem::size_of::<Vertex>() as BufferAddress,
+                    step_mode: VertexStepMode::Vertex,
+                    attributes: &[VertexAttribute {
+                        offset: 0,
+                        shader_location: 0,
+                        format: VertexFormat::Float32x2,
+                    }],
+                }],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {

@@ -1,11 +1,11 @@
 use serde::Deserialize;
 
-use crate::engine::Player;
+use crate::engine::PlayerTexture;
 
 
 #[derive(Deserialize)]
 pub struct PlayerJson {
-    pub name: Player,
+    pub name: PlayerTexture,
     pub index: [u32; 2]
 }
 

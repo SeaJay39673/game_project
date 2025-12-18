@@ -3,9 +3,6 @@
 mod graphics;
 pub use graphics::*;
 
-mod vertex;
-pub use vertex::*;
-
 mod drawable;
 pub use drawable::*;
 

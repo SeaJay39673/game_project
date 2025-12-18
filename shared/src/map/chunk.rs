@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,26 +8,9 @@ use crate::{ChunkPos, Tile, TilePos, generate_heightmap};
 pub struct Chunk {
     pub size: usize,
     pub tiles: HashMap<TilePos, Tile>,
-    #[serde(skip)]
-    pub dirty_tiles: HashSet<TilePos>,
 }
 
 impl Chunk {
-    pub fn mark_dirty(&mut self, pos: TilePos) {
-        self.dirty_tiles.insert(pos);
-    }
-
-    pub fn take_dirty(&mut self) -> Vec<(TilePos, &Tile)> {
-        let mut updates = Vec::new();
-        for pos in &self.dirty_tiles {
-            if let Some(tile) = self.tiles.get(pos) {
-                updates.push((*pos, tile));
-            }
-        }
-        self.dirty_tiles.clear();
-        updates
-    }
-
     pub fn new(pos: ChunkPos) -> Self {
         let size: usize = 4;
         let mut tiles: HashMap<TilePos, Tile> = HashMap::new();
@@ -59,7 +42,6 @@ impl Chunk {
         Self {
             size,
             tiles,
-            dirty_tiles: HashSet::new(),
         }
     }
 }

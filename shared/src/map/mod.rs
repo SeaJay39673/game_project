@@ -6,3 +6,6 @@ pub use height_map::*;
 
 mod chunk;
 pub use chunk::*;
+
+mod chunk_manager;
+pub use chunk_manager::*;

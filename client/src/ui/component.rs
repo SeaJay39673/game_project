@@ -1,87 +1,20 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use wgpu::{BindGroupLayout, Device, Queue};
 
 use crate::{
     engine::{Drawable, GraphicsData, TextureManager, TextureType},
-    ui::UIEvent,
+    ui::{
+        UIAlign, UIComponent, UIComponentEvent, UIComponentID, UIEvent, UILayout, UIMargin, UIRect,
+        UISize,
+    },
 };
-
-static NEXT_ID: AtomicU32 = AtomicU32::new(1);
-
-pub fn new_id() -> UIComponentID {
-    UIComponentID::Num(NEXT_ID.fetch_add(1, Ordering::Relaxed))
-}
-
-#[derive(Clone)]
-pub enum UIComponentID {
-    Num(u32),
-    Name(String),
-}
-
-#[derive(Clone, Copy)]
-pub enum UISize {
-    PercentParent(f32, f32),
-}
-
-#[derive(Clone, Copy)]
-pub enum UILayout {
-    TC,
-    TL,
-    TR,
-    MC,
-    ML,
-    MR,
-    BC,
-    BL,
-    BR,
-}
-
-#[derive(Clone, Copy)]
-pub enum UIAlign {
-    Overlay,
-    Vertical,
-    Horizontal,
-}
-
-#[derive(Clone, Copy)]
-pub struct UIRect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl UIRect {
-    pub fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
-    }
-}
-
-#[derive(Clone)]
-pub enum UIComponentEvent {
-    Clicked(UIComponentID),
-}
-
-pub trait UIComponent: Drawable {
-    fn get_size(&self) -> UISize;
-    fn get_layout(&self) -> UILayout;
-    fn compute_layout(
-        &mut self,
-        parent_rect: UIRect,
-        window_size: (f32, f32),
-        queue: &Queue,
-    ) -> UIRect;
-    fn layout_children(&mut self, parent_rect: UIRect, window_size: (f32, f32), queue: &Queue);
-    fn handle_event(&mut self, event: UIEvent, queue: &Queue) -> Vec<UIComponentEvent>;
-}
 
 pub struct UIComponentItem {
     graphics_data: GraphicsData,
     id: UIComponentID,
     size: UISize,
-    layout: UILayout,
-    align: UIAlign,
+    margin: UIMargin,
+    layout_children: UILayout,
+    align_children: UIAlign,
     children: Vec<Box<dyn UIComponent + 'static>>,
 }
 
@@ -89,8 +22,9 @@ pub struct UIComponentBuilder {
     id: Option<UIComponentID>,
     background: Option<TextureType>,
     size: UISize,
-    layout: UILayout,
-    align: UIAlign,
+    margin: UIMargin,
+    layout_children: UILayout,
+    align_children: UIAlign,
     children: Vec<Box<dyn UIComponent + 'static>>,
 }
 
@@ -107,16 +41,21 @@ impl UIComponentBuilder {
         self.size = size;
         self
     }
-    pub fn layout(mut self, layout: UILayout) -> Self {
-        self.layout = layout;
+    pub fn layout_children(mut self, layout_children: UILayout) -> Self {
+        self.layout_children = layout_children;
         self
     }
-    pub fn align(mut self, align: UIAlign) -> Self {
-        self.align = align;
+    pub fn align_children(mut self, align_children: UIAlign) -> Self {
+        self.align_children = align_children;
         self
     }
     pub fn add_child(mut self, child: Box<dyn UIComponent + 'static>) -> Self {
         self.children.push(child);
+        self
+    }
+
+    pub fn margin(mut self, margin: f32) -> Self {
+        self.margin = UIMargin::new(margin, margin, margin, margin);
         self
     }
 
@@ -128,7 +67,7 @@ impl UIComponentBuilder {
     ) -> anyhow::Result<UIComponentItem> {
         let id = match self.id {
             Some(id) => id,
-            None => new_id(),
+            None => UIComponentID::new_id(),
         };
 
         let background = match self.background {
@@ -141,14 +80,15 @@ impl UIComponentBuilder {
         };
 
         let graphics_data: GraphicsData =
-            GraphicsData::new(device, layout, [0.0, 0.0, 0.0], background, 2.0);
+            GraphicsData::new(device, layout, [0.0, 0.0, 0.0], background, 0.0);
 
         Ok(UIComponentItem {
             id,
             graphics_data,
             size: self.size,
-            layout: self.layout,
-            align: self.align,
+            margin: self.margin,
+            layout_children: self.layout_children,
+            align_children: self.align_children,
             children: self.children,
         })
     }
@@ -160,117 +100,108 @@ impl UIComponentItem {
             id: None,
             background: None,
             size: UISize::PercentParent(1.0, 1.0),
-            layout: UILayout::MC,
-            align: UIAlign::Overlay,
+            margin: UIMargin::ZERO,
+            layout_children: UILayout::MC,
+            align_children: UIAlign::Overlay,
             children: vec![],
         }
     }
 }
 
-pub fn compute_rect(parent_rect: UIRect, size: UISize, layout: UILayout) -> UIRect {
-    let (w, h) = match size {
-        UISize::PercentParent(px, py) => (parent_rect.w * px, parent_rect.h * py),
-    };
-    let (x, y) = match layout {
-        UILayout::TL => (parent_rect.x, parent_rect.y),
-        UILayout::TC => (parent_rect.x + (parent_rect.w - w) * 0.5, parent_rect.y),
-        UILayout::TR => (parent_rect.x + parent_rect.w - w, parent_rect.y),
-        UILayout::ML => (parent_rect.x, parent_rect.y + (parent_rect.h - h) * 0.5),
-        UILayout::MC => (
-            parent_rect.x + (parent_rect.w - w) * 0.5,
-            parent_rect.y + (parent_rect.h - h) * 0.5,
-        ),
-        UILayout::MR => (
-            parent_rect.x + parent_rect.w - w,
-            parent_rect.y + (parent_rect.h - h) * 0.5,
-        ),
-        UILayout::BL => (parent_rect.x, parent_rect.y + parent_rect.h - h),
-        UILayout::BC => (
-            parent_rect.x + (parent_rect.w - w) * 0.5,
-            parent_rect.y + parent_rect.h - h,
-        ),
-        UILayout::BR => (
-            parent_rect.x + parent_rect.w - w,
-            parent_rect.y + parent_rect.h - h,
-        ),
-    };
-    UIRect { x, y, w, h }
-}
-
 impl UIComponent for UIComponentItem {
+    fn get_id(&self) -> UIComponentID {
+        self.id.clone()
+    }
+
     fn get_size(&self) -> UISize {
         self.size
     }
-    fn get_layout(&self) -> UILayout {
-        self.layout
-    }
-    fn compute_layout(
-        &mut self,
-        parent_rect: UIRect,
-        window_size: (f32, f32),
-        queue: &Queue,
-    ) -> UIRect {
-        let rect = compute_rect(parent_rect, self.size, self.layout);
-        let UIRect { x, y, w, h } = rect;
-        self.graphics_data.set_rect(queue, x, y, w, h, window_size);
-        self.layout_children(rect, window_size, queue);
-        rect
+
+    fn get_margin(&self) -> UIMargin {
+        self.margin
     }
 
-    fn layout_children(&mut self, parent_rect: UIRect, window_size: (f32, f32), queue: &Queue) {
-        match self.align {
+    fn compute_layout(&mut self, rect: UIRect, window_size: (f32, f32), queue: &Queue) {
+        let UIRect { x, y, w, h } = rect;
+        self.graphics_data.set_rect(queue, x, y, w, h, window_size);
+
+        self.layout_children(rect, window_size, queue);
+    }
+
+    fn layout_children(&mut self, rect: UIRect, window_size: (f32, f32), queue: &Queue) {
+        match self.align_children {
             UIAlign::Overlay => {
                 for child in &mut self.children {
-                    child.compute_layout(parent_rect, window_size, queue);
+                    let child_rect = rect.compute_rect(child.get_size(), self.layout_children);
+                    child.compute_layout(child_rect, window_size, queue);
                 }
             }
             UIAlign::Vertical => {
-                if self.children.is_empty() {
-                    return;
-                }
-
-                let mut cy = parent_rect.y;
+                let mut rects: Vec<(UIRect, UIRect)> = vec![];
+                let mut total_size: f32 = 0.0;
 
                 for child in &mut self.children {
-                    let mut child_rect = compute_rect(parent_rect, child.get_size(), child.get_layout());
-                    
-                    child_rect.y = cy;
+                    let child_rect = rect.compute_rect(child.get_size(), self.layout_children);
 
-                    child.compute_layout(child_rect, window_size, queue);
+                    let margin_rect = child_rect.apply_margin(rect, child.get_margin());
 
-                    cy += child_rect.h / 2.0;
+                    total_size += margin_rect.h;
+                    rects.push((child_rect, margin_rect));
+                }
+
+                let mut current_y: f32 = rect.y + (rect.h - total_size) / 2.0;
+
+                for (child, (child_rect, margin_rect)) in
+                    self.children.iter_mut().zip(rects.iter_mut())
+                {
+                    margin_rect.y = current_y;
+                    current_y += margin_rect.h;
+                    let final_rect = UIRect {
+                        x: child_rect.x + rect.w * child.get_margin().left,
+                        y: margin_rect.y,
+                        w: child_rect.w,
+                        h: child_rect.h,
+                    };
+                    child.compute_layout(final_rect, window_size, queue);
                 }
             }
             UIAlign::Horizontal => {
-                if self.children.is_empty() {
-                    return;
-                }
-                let count = self.children.len() as f32;
-                let child_w = parent_rect.w / count;
-                let mut cx = parent_rect.x;
+                let mut rects: Vec<(UIRect, UIRect)> = vec![];
+                let mut total_size: f32 = 0.0;
+
                 for child in &mut self.children {
-                    child.compute_layout(
-                        UIRect {
-                            x: cx,
-                            y: parent_rect.y,
-                            w: child_w,
-                            h: parent_rect.h,
-                        },
-                        window_size,
-                        queue,
-                    );
-                    cx += child_w;
+                    let child_rect = rect.compute_rect(child.get_size(), self.layout_children);
+                    let margin_rect = child_rect.apply_margin(rect, child.get_margin());
+                    total_size += margin_rect.w;
+                    rects.push((child_rect, margin_rect));
                 }
+
+                let mut current_x: f32 = rect.x + (rect.w - total_size) / 2.0;
+
+                self.children.iter_mut().zip(rects.iter_mut()).for_each(
+                    |(child, (child_rect, margin_rect))| {
+                        margin_rect.x = current_x;
+                        current_x += margin_rect.w;
+
+                        let final_rect = UIRect {
+                            x: margin_rect.x + rect.w * child.get_margin().left,
+                            y: child_rect.y + rect.h * child.get_margin().top,
+                            w: child_rect.w,
+                            h: child_rect.h,
+                        };
+
+                        child.compute_layout(final_rect, window_size, queue);
+                    },
+                );
             }
         }
     }
 
-    fn handle_event(&mut self, event: UIEvent, queue: &Queue) -> Vec<UIComponentEvent> {
+    fn handle_event(&mut self, event: &UIEvent, queue: &Queue) -> Vec<UIComponentEvent> {
         let mut events: Vec<UIComponentEvent> = vec![];
         for child in &mut self.children {
-            events.extend_from_slice(&child.handle_event(event.clone(), queue));
+            events.extend_from_slice(&child.handle_event(event, queue));
         }
-
         events
     }
 }
@@ -278,8 +209,9 @@ impl UIComponent for UIComponentItem {
 impl Drawable for UIComponentItem {
     fn render(&self, render_pass: &mut wgpu::RenderPass) {
         self.graphics_data.render(render_pass);
-        self.children
-            .iter()
-            .for_each(|child| child.render(render_pass));
+
+        for child in &self.children {
+            child.render(render_pass);
+        }
     }
 }

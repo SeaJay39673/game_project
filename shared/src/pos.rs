@@ -7,6 +7,12 @@ pub struct PlayerPos {
     pub z: f32,
 }
 
+impl PlayerPos {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self { x, y, z }
+    }
+}
+
 #[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Copy)]
 pub struct TilePos {
     pub x: i64,

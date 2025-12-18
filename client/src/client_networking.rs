@@ -1,11 +1,13 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use quinn::crypto::rustls::QuicClientConfig;
 use rustls::{
     DigitallySignedStruct, Error as TlsError, SignatureScheme,
-    client::danger::{ServerCertVerified, ServerCertVerifier, HandshakeSignatureValid},
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
 };
+
+use anyhow::anyhow;
 
 #[derive(Debug)]
 pub struct AllowAnyLocalhostCert;
@@ -50,6 +52,8 @@ impl ServerCertVerifier for AllowAnyLocalhostCert {
 }
 
 pub fn get_single_player_endpoint() -> anyhow::Result<quinn::Endpoint> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
     let client_crypto: rustls::ClientConfig = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(AllowAnyLocalhostCert))
@@ -62,4 +66,4 @@ pub fn get_single_player_endpoint() -> anyhow::Result<quinn::Endpoint> {
     endpoint.set_default_client_config(client_config);
 
     Ok(endpoint)
-} 
+}

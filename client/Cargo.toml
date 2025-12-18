@@ -13,6 +13,7 @@ quinn = { version = "0.11.9", features = ["aws-lc-rs"] }
 rustls = { version = "0.23.35", features = ["aws-lc-rs"] }
 serde = "1.0.228"
 serde_json = "1.0.145"
+server_lib = { version = "0.1.0", path = "../server_lib" }
 shared = { version = "0.1.0", path = "../shared" }
 tokio = { version = "1.48.0", features = ["full"] }
 wgpu = "27.0.1"

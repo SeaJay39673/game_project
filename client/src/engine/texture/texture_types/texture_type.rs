@@ -1,7 +1,7 @@
-use crate::engine::Player;
+use crate::engine::{PlayerTexture};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum TextureType {
-    Player(Player),
+    Player(PlayerTexture),
     Color([u8; 4]),
 }

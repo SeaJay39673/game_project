@@ -1,10 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use serde::de;
 use winit::{
     application::ApplicationHandler,
     event::{StartCause, WindowEvent},
@@ -15,8 +14,8 @@ use winit::{
 
 use crate::{
     asset_ingestion::load_assets,
-    engine::{Drawable, Graphics},
-    ui::{Menu, MenuEvent, PlayMenu, StartMenu, UIComponent, UIEvent, UIRect},
+    engine::Graphics,
+    ui::{ActiveMenu, Menu, MenuManager, UIEvent},
 };
 
 struct GameManager {
@@ -32,7 +31,7 @@ struct GameManager {
     pressed_keys: HashSet<SmolStr>,
     cursor_location: (f32, f32),
 
-    menu: Option<Box<dyn Menu>>,
+    menu: Option<MenuManager>,
 }
 
 impl GameManager {
@@ -107,6 +106,12 @@ impl ApplicationHandler for GameManager {
         let now = Instant::now();
         let next_frame_time = self.last_frame + self.target_frame_duration;
 
+        if let (Some(graphics), Some(menu)) = (&self.graphics, &mut self.menu) {
+            if let Err(e) = pollster::block_on(menu.update(&UIEvent::None, graphics)) {
+                eprintln!("Error updating menu: {e}");
+            }
+        } 
+
         if now >= next_frame_time || matches!(cause, StartCause::Init) {
             if let Some(window) = &self.window {
                 window.request_redraw();
@@ -148,20 +153,10 @@ impl ApplicationHandler for GameManager {
 
         if self.menu.is_none() {
             if let (Some(window), Some(graphics)) = (&self.window, &self.graphics) {
-                let Graphics {
-                    device,
-                    queue,
-                    tile_bind_group_layout,
-                    ..
-                } = graphics;
                 let size = window.inner_size();
-                match StartMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
-                    Ok(mut menu) => {
-                        self.menu = Some(Box::new(menu));
-                    }
-                    Err(e) => {
-                        println!("Could not create Start Menu: {e}");
-                    }
+                match MenuManager::new(graphics, (size.width as f32, size.height as f32), self.cursor_location) {
+                    Ok(menu) => self.menu = Some(menu),
+                    Err(e) => println!("Could not create MenuManager: {e}"),
                 }
             }
         }
@@ -190,77 +185,31 @@ impl ApplicationHandler for GameManager {
                     self.handle_key(ch, event.state.is_pressed());
                 }
                 self.update_window();
-                if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    let Graphics { queue, .. } = graphics;
-                    menu.handle_ui_event(
-                        UIEvent::KeyEntered {
-                            pressed_named_keys: &self.pressed_named_keys,
-                            pressed_keys: &self.pressed_keys,
-                        },
-                        queue,
-                    );
-                }
             }
             WindowEvent::CursorMoved {
-                device_id,
+                device_id: _,
                 position,
             } => {
                 self.handle_cursor_location((position.x as f32, position.y as f32));
                 if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    let Graphics { queue, .. } = graphics;
-                    menu.handle_ui_event(
-                        UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1),
-                        queue,
-                    );
+                    let _ = pollster::block_on(menu.update(&UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1), graphics));
                 }
             }
             WindowEvent::MouseInput {
-                device_id,
+                device_id: _,
                 state,
                 button,
             } => {
-                if let (Some(window), Some(graphics), Some(menu)) = (& self.window, &mut self.graphics, &mut self.menu) {
-                    let Graphics {
-                        device,
-                        queue,
-                        tile_bind_group_layout,
-                        ..
-                    } = graphics;
-                    match menu.handle_ui_event(
-                        UIEvent::MouseClicked {
-                            position: self.cursor_location,
-                            state,
-                            button,
-                        },
-                        queue,
-                    ) {
-                        MenuEvent::PlayMenu => {
-                            let size = window.inner_size();
-                            match PlayMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
-                                Ok(menu) => self.menu = Some(Box::new(menu)),
-                                Err(e) => eprintln!("Could not create PlayMenu"),
-                            }
-                        }
-                        MenuEvent::StartMenu => {
-                            let size = window.inner_size();
-                            match StartMenu::new(device, queue, tile_bind_group_layout, (size.width as f32, size.height as f32)) {
-                                Ok(menu) => self.menu = Some(Box::new(menu)),
-                                Err(e) => eprintln!("Could not create StartMenu"),
-                            }
-                        }
-                        _ => {}
-                    }
+                if let (Some(graphics), Some(menu)) =
+                    (&mut self.graphics, &mut self.menu)
+                {
+                    let _ = pollster::block_on(menu.update(&UIEvent::MouseClicked { position: self.cursor_location, state, button }, graphics));
                 }
             }
-            WindowEvent::MouseWheel {
-                device_id,
-                delta,
-                phase,
-            } => {}
             WindowEvent::RedrawRequested => {
                 if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    if let Err(e) = graphics.render(&[menu.as_ref()]) {
-                        eprintln!("Could not render menu")
+                    if let Err(e) = graphics.render(&[menu]) {
+                        eprintln!("Could not render menu: {e}")
                     }
                 }
             }
