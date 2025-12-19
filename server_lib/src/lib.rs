@@ -11,10 +11,9 @@ use rcgen::{CertifiedKey, KeyPair};
 use rustls::pki_types::PrivatePkcs8KeyDer;
 use sea_orm::Database;
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
-use tokio::sync::{Notify};
+use tokio::sync::{Notify, watch};
 
 mod server_networking;
-mod server_session;
 mod state;
 pub mod thread_manager;
 
@@ -57,7 +56,7 @@ async fn run_accept_loop(
 
 pub async fn start_single_player(
     option: GameStartOption,
-    ready: Arc<Notify>,
+    ready: watch::Sender<bool>,
     thread_manager: Arc<ThreadManager>,
 ) -> anyhow::Result<()> {
 
@@ -86,7 +85,7 @@ pub async fn start_single_player(
     let endpoint: quinn::Endpoint = quinn::Endpoint::server(server_config, addr)?;
     println!("Server listening on {addr}");
 
-    let _ = ready.notify_waiters();
+    let _ = ready.send(true)?;
 
     run_accept_loop(endpoint.clone(), thread_manager, game_manager).await;
 

@@ -5,8 +5,8 @@ use wgpu::Queue;
 use crate::{
     engine::{Drawable, Graphics, TextureType},
     ui::{
-        Menu, MenuEvent, UIAlign, UIButton, UIComponentEvent, UIComponentID,
-        UIComponentItem, UIEvent, UILayout, UIRoot, UIRootItem, UISize,
+        Menu, MenuEvent, UIAlign, UIButton, UIComponentEvent, UIComponentID, UIComponentItem,
+        UIEvent, UILayout, UIRoot, UIRootItem, UISize,
     },
 };
 
@@ -117,7 +117,7 @@ impl StartMenu {
 }
 
 impl Menu for StartMenu {
-    async fn update(
+    fn handle_input(
         &mut self,
         ui_event: &UIEvent,
         graphics: &Graphics,
@@ -137,7 +137,10 @@ impl Menu for StartMenu {
                 }
             }
         }
+        Ok(MenuEvent::None)
+    }
 
+    fn update(&mut self, graphics: &Graphics) -> anyhow::Result<MenuEvent> {
         Ok(MenuEvent::None)
     }
 

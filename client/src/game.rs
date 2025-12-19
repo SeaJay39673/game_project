@@ -15,7 +15,7 @@ use winit::{
 use crate::{
     asset_ingestion::load_assets,
     engine::Graphics,
-    ui::{ActiveMenu, Menu, MenuManager, UIEvent},
+    ui::{Menu, MenuManager, UIEvent},
 };
 
 struct GameManager {
@@ -107,7 +107,7 @@ impl ApplicationHandler for GameManager {
         let next_frame_time = self.last_frame + self.target_frame_duration;
 
         if let (Some(graphics), Some(menu)) = (&self.graphics, &mut self.menu) {
-            if let Err(e) = pollster::block_on(menu.update(&UIEvent::None, graphics)) {
+            if let Err(e) = menu.update(graphics) {
                 eprintln!("Error updating menu: {e}");
             }
         } 
@@ -139,13 +139,10 @@ impl ApplicationHandler for GameManager {
             if let Some(ref window) = self.window {
                 match pollster::block_on(Graphics::new(window)) {
                     Ok(graphics) => {
-                        if let Err(e) = load_assets("src/assets/assets.json") {
-                            panic!("Could not load assets from src/assets/assets.json: {e}");
-                        }
                         self.graphics = Some(graphics);
                     }
                     Err(e) => {
-                        println!("Could not create graphics: {e}");
+                        panic!("Could not create graphics: {e}");
                     }
                 }
             }
@@ -156,7 +153,7 @@ impl ApplicationHandler for GameManager {
                 let size = window.inner_size();
                 match MenuManager::new(graphics, (size.width as f32, size.height as f32), self.cursor_location) {
                     Ok(menu) => self.menu = Some(menu),
-                    Err(e) => println!("Could not create MenuManager: {e}"),
+                    Err(e) => panic!("Could not create MenuManager: {e}"),
                 }
             }
         }
@@ -192,7 +189,7 @@ impl ApplicationHandler for GameManager {
             } => {
                 self.handle_cursor_location((position.x as f32, position.y as f32));
                 if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    let _ = pollster::block_on(menu.update(&UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1), graphics));
+                    let _ = menu.handle_input(&UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1), graphics);
                 }
             }
             WindowEvent::MouseInput {
@@ -203,7 +200,7 @@ impl ApplicationHandler for GameManager {
                 if let (Some(graphics), Some(menu)) =
                     (&mut self.graphics, &mut self.menu)
                 {
-                    let _ = pollster::block_on(menu.update(&UIEvent::MouseClicked { position: self.cursor_location, state, button }, graphics));
+                    let _ = menu.handle_input(&UIEvent::MouseClicked { position: self.cursor_location, state, button }, graphics);
                 }
             }
             WindowEvent::RedrawRequested => {

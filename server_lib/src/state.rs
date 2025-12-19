@@ -2,7 +2,8 @@ use anyhow::anyhow;
 use bcrypt::{hash, verify};
 use dashmap::DashMap;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryFilter, sqlx::types::chrono
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait,
+    QueryFilter, sqlx::types::chrono,
 };
 use shared::{AccountCredentials, AccountInfo, ServerControlStreamMessage, accounts, characters};
 use std::{
@@ -113,13 +114,20 @@ impl GameManager {
         username: String,
         character_name: String,
     ) -> ServerControlStreamMessage {
-        match accounts::Entity::find_by_id(username.clone()).one(&self.db).await {
-            Ok(Some(_)) => {},
+        match accounts::Entity::find_by_id(username.clone())
+            .one(&self.db)
+            .await
+        {
+            Ok(Some(_)) => {}
             Ok(None) => {
-                return ServerControlStreamMessage::CharacterDenied("Account does not exist".into());
-            },
+                return ServerControlStreamMessage::CharacterDenied(
+                    "Account does not exist".into(),
+                );
+            }
             Err(e) => {
-                return ServerControlStreamMessage::AccountCreateDenied(format!("DB error checking account: {e}"));
+                return ServerControlStreamMessage::AccountCreateDenied(format!(
+                    "DB error checking account: {e}"
+                ));
             }
         }
 
@@ -132,7 +140,9 @@ impl GameManager {
 
         match character.insert(&self.db).await {
             Ok(model) => ServerControlStreamMessage::CharacterSelected(model.character_id),
-            Err(e) => ServerControlStreamMessage::CharacterDenied(format!("Failed to create character: {e}"))
+            Err(e) => ServerControlStreamMessage::CharacterDenied(format!(
+                "Failed to create character: {e}"
+            )),
         }
     }
 
@@ -145,22 +155,29 @@ impl GameManager {
             .filter(characters::Column::AccountUsername.eq(username.clone()))
             .filter(characters::Column::CharacterId.eq(character_id.clone()))
             .one(&self.db)
-            .await {
-                Ok(Some(model)) => {
-                    ServerControlStreamMessage::CharacterSelected(model.character_id)
-                },
-                Ok(None) => {
-                    ServerControlStreamMessage::CharacterDenied(format!("Could not find character"))
-                }
-                Err(e) => {
-                    ServerControlStreamMessage::CharacterDenied(format!("DB error when trying to find character: {e}"))
-                }
-            };
+            .await
+        {
+            Ok(Some(model)) => {
+                return ServerControlStreamMessage::CharacterSelected(model.character_id);
+            }
+            Ok(None) => {
+                return ServerControlStreamMessage::CharacterDenied(format!(
+                    "Could not find character"
+                ));
+            }
+            Err(e) => ServerControlStreamMessage::CharacterDenied(format!(
+                "DB error when trying to find character: {e}"
+            )),
+        };
 
         ServerControlStreamMessage::CharacterDenied("An unexpected error occured".into())
     }
 
-    pub async fn create(&self, credentials: AccountCredentials) -> ServerControlStreamMessage {
+    pub async fn create(
+        &self,
+        credentials: AccountCredentials,
+        session: Arc<tokio::sync::Mutex<ServerSession>>,
+    ) -> ServerControlStreamMessage {
         let AccountCredentials {
             username,
             user_password,
@@ -172,24 +189,24 @@ impl GameManager {
             .await
         {
             Ok(Some(_)) => {
-                return ServerControlStreamMessage::AccountCreateDenied(
-                    "Account already exists".into(),
-                );
+                let msg = "Account already exists".to_string();
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                return ServerControlStreamMessage::AccountCreateDenied(msg);
             }
-            Ok(None) => {} // good, continue
+            Ok(None) => {}
             Err(e) => {
-                return ServerControlStreamMessage::AccountCreateDenied(format!(
-                    "Database error: {e}"
-                ));
+                let msg = format!("Database error: {e}");
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                return ServerControlStreamMessage::AccountCreateDenied(msg);
             }
         }
 
         let password_hash = match hash(&user_password, bcrypt::DEFAULT_COST) {
             Ok(h) => h,
             Err(e) => {
-                return ServerControlStreamMessage::AccountCreateDenied(format!(
-                    "Password hash failed: {e}"
-                ));
+                let msg = format!("Password hash failed: {e}");
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                return ServerControlStreamMessage::AccountCreateDenied(msg);
             }
         };
 
@@ -200,17 +217,28 @@ impl GameManager {
         };
 
         match account.insert(&self.db).await {
-            Ok(_) => ServerControlStreamMessage::Authenticated(AccountInfo {
-                username,
-                characters: vec![],
-            }),
-            Err(e) => ServerControlStreamMessage::AccountCreateDenied(format!(
-                "Failed to create account: {e}"
-            )),
+            Ok(_) => {
+                session.lock().await.auth = AuthState::Authenticated {
+                    username: username.clone(),
+                };
+                ServerControlStreamMessage::Authenticated(AccountInfo {
+                    username,
+                    characters: vec![],
+                })
+            }
+            Err(e) => {
+                let msg = format!("Failed to create account: {e}");
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                ServerControlStreamMessage::AccountCreateDenied(msg)
+            }
         }
     }
 
-    pub async fn login(&self, credentials: AccountCredentials) -> ServerControlStreamMessage {
+    pub async fn login(
+        &self,
+        credentials: AccountCredentials,
+        session: Arc<tokio::sync::Mutex<ServerSession>>,
+    ) -> ServerControlStreamMessage {
         let AccountCredentials {
             username,
             user_password,
@@ -222,27 +250,44 @@ impl GameManager {
         {
             Ok(Some(acc)) => acc,
             Ok(None) => {
-                return ServerControlStreamMessage::LoginDenied("Account does not exists".into());
+                let msg = "Account does not exist".to_string();
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                return ServerControlStreamMessage::LoginDenied(msg);
             }
             Err(e) => {
-                return ServerControlStreamMessage::LoginDenied(format!("Database error: {e}"));
+                let msg = format!("Database error: {e}");
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                return ServerControlStreamMessage::LoginDenied(msg);
             }
         };
 
         match verify(&user_password, &account.password_hash) {
             Ok(true) => match account.find_related(characters::Entity).all(&self.db).await {
-                Ok(characters) => ServerControlStreamMessage::Authenticated(AccountInfo {
-                    username,
-                    characters: characters,
-                }),
-                Err(e) => ServerControlStreamMessage::LoginDenied(format!(
-                    "Could not load account characters: {e}"
-                )),
+                Ok(characters) => {
+                    session.lock().await.auth = AuthState::Authenticated {
+                        username: username.clone(),
+                    };
+                    ServerControlStreamMessage::Authenticated(AccountInfo {
+                        username,
+                        characters: characters,
+                    })
+                }
+                Err(e) => {
+                    let msg = format!("Could not load account characters: {e}");
+                    session.lock().await.auth = AuthState::Rejected(msg.clone());
+                    ServerControlStreamMessage::LoginDenied(msg)
+                }
             },
-            Ok(false) => ServerControlStreamMessage::LoginDenied("Invalid Password".into()),
-            Err(e) => ServerControlStreamMessage::LoginDenied(format!(
-                "Password verification failed: {e}"
-            )),
+            Ok(false) => {
+                let msg = "Invalid Password".to_string();
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                ServerControlStreamMessage::LoginDenied(msg)
+            }
+            Err(e) => {
+                let msg = format!("Password verification failed: {e}");
+                session.lock().await.auth = AuthState::Rejected(msg.clone());
+                ServerControlStreamMessage::LoginDenied(msg)
+            }
         }
     }
 }

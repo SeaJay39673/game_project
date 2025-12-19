@@ -1,5 +1,4 @@
 use std::{future::Future, sync::Arc};
-use sea_orm::ActiveValue::Set;
 use tokio::{sync::Mutex, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
@@ -20,6 +19,10 @@ impl ThreadManager {
 
     pub async fn await_cancel(self: &Arc<Self>) {
         self.cancel.cancelled().await;
+    }
+
+    pub fn is_cancelled(self: &Arc<Self>) -> bool {
+        self.cancel.is_cancelled()
     }
 
     pub async fn child(self: &Arc<Self>) -> Arc<Self> {

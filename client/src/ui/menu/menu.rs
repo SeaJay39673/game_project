@@ -4,7 +4,7 @@ use wgpu::Queue;
 use winit::event::{ElementState, MouseButton};
 
 use crate::{
-    engine::{Drawable, Graphics}, ui::{GameMenu, LoadGameMenu, ServerState, StartMenu}
+    engine::{Drawable, Graphics}, server_state::ServerState, ui::{GameMenu, LoadGameMenu, StartMenu}
 };
 
 pub enum UIEvent {
@@ -21,7 +21,7 @@ pub enum MenuEvent {
     None,
     SwitchToStart,
     SwitchToLoadGame,
-    SwitchToGame(Arc<tokio::sync::Mutex<ServerState>>),
+    // SwitchToGame(Arc<ServerState>),
 }
 
 pub enum ActiveMenu {
@@ -31,10 +31,14 @@ pub enum ActiveMenu {
 }
 
 pub trait Menu: Drawable {
-    async fn update(
+    fn update(
+        &mut self,
+        graphics: &Graphics,
+    ) -> anyhow::Result<MenuEvent>;
+    fn handle_input(
         &mut self,
         ui_event: &UIEvent,
-        graphics: &Graphics,
+        graphics: &Graphics
     ) -> anyhow::Result<MenuEvent>;
     fn handle_resize(&mut self, queue: &Queue, width: f32, height: f32);
 }
@@ -68,15 +72,34 @@ impl Menu for MenuManager {
         }
     }
 
-    async fn update(
+    fn handle_input(
+            &mut self,
+            ui_event: &UIEvent,
+            graphics: &Graphics
+        ) -> anyhow::Result<MenuEvent> {
+        let event = match &mut self.menu {
+            ActiveMenu::Start(m) => m.handle_input(ui_event, graphics)?,
+            ActiveMenu::LoadGame(m) => m.handle_input(ui_event, graphics)?,
+            ActiveMenu::Game(m) => m.handle_input(ui_event, graphics)?
+        };
+
+        match event {
+            MenuEvent::None => {}
+            MenuEvent::SwitchToStart => self.menu = ActiveMenu::Start(StartMenu::new(graphics, self.size, self.mouse_position)?),
+            MenuEvent::SwitchToLoadGame => self.menu = ActiveMenu::LoadGame(LoadGameMenu::new(graphics, self.size, self.mouse_position)?),
+        };
+
+        Ok(MenuEvent::None)
+    }
+
+    fn update(
         &mut self,
-        ui_event: &UIEvent,
         graphics: &Graphics,
     ) -> anyhow::Result<MenuEvent> {
         let event = match &mut self.menu {
-            ActiveMenu::Start(m) => m.update(ui_event, graphics).await?,
-            ActiveMenu::LoadGame(m) => m.update(ui_event, graphics).await?,
-            ActiveMenu::Game(m) => m.update(ui_event, graphics).await?,
+            ActiveMenu::Start(m) => m.update(graphics)?,
+            ActiveMenu::LoadGame(m) => m.update(graphics)?,
+            ActiveMenu::Game(m) => m.update(graphics)?,
         };
 
         match event {
@@ -89,10 +112,7 @@ impl Menu for MenuManager {
                     graphics,
                     self.size,
                     self.mouse_position,
-                ).await?);
-            }
-            MenuEvent::SwitchToGame(server_state) => {
-                self.menu = ActiveMenu::Game(GameMenu::new(server_state, graphics, self.size, self.mouse_position).await?);
+                )?);
             }
         }
 

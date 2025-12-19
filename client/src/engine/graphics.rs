@@ -11,7 +11,7 @@ use wgpu::{
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::engine::{Drawable, graphics_data::Vertex};
+use crate::{asset_ingestion::load_assets, engine::{Drawable, graphics_data::Vertex}};
 
 use anyhow::{anyhow, bail};
 
@@ -152,6 +152,8 @@ impl Graphics {
             multiview: None,
             cache: None,
         });
+
+        load_assets("src/assets/assets.json")?;
 
         Ok(Self {
             surface,

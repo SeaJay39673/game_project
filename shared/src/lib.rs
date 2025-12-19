@@ -33,6 +33,7 @@ pub struct AccountInfo {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ClientControlStreamMessage {
+    ConnectionRequest,
     CreateAccount(AccountCredentials),
     Login(AccountCredentials),
     CreateCharacter(String),
@@ -41,6 +42,7 @@ pub enum ClientControlStreamMessage {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ServerControlStreamMessage {
+    Connected,
     Disconnected(String),
     Authenticated(AccountInfo),
     LoginDenied(String),

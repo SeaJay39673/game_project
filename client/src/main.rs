@@ -1,15 +1,20 @@
 use crate::game::Game;
+use anyhow::anyhow;
 
-mod game;
-mod engine;
 mod asset_ingestion;
-mod ui;
-mod game_state;
 mod client_networking;
+mod engine;
+mod game;
+mod game_state;
+mod server_state;
+mod ui;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    Game::new()?.run()?;
+    if let Err(e) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        return Err(anyhow!("Error installing default crypto provider: {:?}", e));
+    }
 
+    Game::new()?.run()?;
     Ok(())
 }

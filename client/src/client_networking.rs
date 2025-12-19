@@ -52,8 +52,6 @@ impl ServerCertVerifier for AllowAnyLocalhostCert {
 }
 
 pub fn get_single_player_endpoint() -> anyhow::Result<quinn::Endpoint> {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-
     let client_crypto: rustls::ClientConfig = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(AllowAnyLocalhostCert))
