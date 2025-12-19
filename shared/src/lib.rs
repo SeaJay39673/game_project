@@ -21,14 +21,18 @@ pub struct AccountCredentials {
 
 impl AccountCredentials {
     pub fn new(username: String, user_password: String, server_password: Option<String>) -> Self {
-        Self { username, user_password, server_password }
+        Self {
+            username,
+            user_password,
+            server_password,
+        }
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AccountInfo {
     pub username: String,
-    pub characters: Vec<characters::Model>
+    pub characters: Vec<characters::Model>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

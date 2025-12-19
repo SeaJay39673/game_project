@@ -1,4 +1,10 @@
-use std::{any, fs::read_to_string, net::SocketAddr, str::FromStr, sync::{Arc, Mutex}};
+use std::{
+    any,
+    fs::read_to_string,
+    net::SocketAddr,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::anyhow;
 use server_lib::{GameStartOption, start_single_player, thread_manager::ThreadManager};
@@ -7,7 +13,8 @@ use shared::{
 };
 use tokio::sync::{
     Notify,
-    mpsc::{UnboundedReceiver, UnboundedSender, error::TryRecvError, unbounded_channel}, watch,
+    mpsc::{UnboundedReceiver, UnboundedSender, error::TryRecvError, unbounded_channel},
+    watch,
 };
 
 use crate::{client_networking::get_single_player_endpoint, server_state};
@@ -96,7 +103,9 @@ impl ServerState {
                         }
                     };
 
-                    if let Err(e) = send_message(send, ClientControlStreamMessage::ConnectionRequest).await {
+                    if let Err(e) =
+                        send_message(send, ClientControlStreamMessage::ConnectionRequest).await
+                    {
                         eprintln!("Failed to send initial connection request to server: {e}");
                         thread_manager.shutdown().await;
                         return;
@@ -157,7 +166,6 @@ impl ServerState {
         )
         .await;
 
-
         Arc::new(Self {
             thread_manager,
             shutdown: false,
@@ -184,7 +192,9 @@ impl ServerState {
 
     pub fn receive_messages(
         self: Arc<Self>,
-    ) -> anyhow::Result<Vec<Result<ServerControlStreamMessage, tokio::sync::mpsc::error::TryRecvError>>> {
+    ) -> anyhow::Result<
+        Vec<Result<ServerControlStreamMessage, tokio::sync::mpsc::error::TryRecvError>>,
+    > {
         let mut lock = self.server_rx.lock().map_err(|e| anyhow!("{e}"))?;
         let mut messages: Vec<Result<ServerControlStreamMessage, TryRecvError>> = vec![];
         loop {

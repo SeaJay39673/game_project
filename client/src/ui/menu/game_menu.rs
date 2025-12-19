@@ -1,13 +1,15 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 
 use server_lib::GameStartOption;
 use shared::{
-    AccountCredentials, AccountInfo, ClientControlStreamMessage, ServerControlStreamMessage
+    AccountCredentials, AccountInfo, ClientControlStreamMessage, ServerControlStreamMessage,
 };
 use tokio::sync::mpsc::error::TryRecvError;
 
 use crate::{
-    engine::{Drawable, Graphics}, server_state::ServerState, ui::{Menu, MenuEvent, UIComponentEvent, UIComponentID, UIRoot, UIRootItem}
+    engine::{Drawable, Graphics},
+    server_state::ServerState,
+    ui::{Menu, MenuEvent, UIComponentEvent, UIComponentID, UIRoot, UIRootItem},
 };
 
 pub struct LoadGameMenu {
@@ -38,7 +40,8 @@ impl LoadGameMenu {
             queue,
         );
 
-        let server_state = pollster::block_on(ServerState::new(GameStartOption::LoadGame("Blah".into())));
+        let server_state =
+            pollster::block_on(ServerState::new(GameStartOption::LoadGame("Blah".into())));
 
         Ok(Self {
             root: Box::new(root),
@@ -60,21 +63,18 @@ impl Menu for LoadGameMenu {
     }
 
     fn handle_input(
-            &mut self,
-            ui_event: &super::UIEvent,
-            graphics: &Graphics
-        ) -> anyhow::Result<MenuEvent> {
+        &mut self,
+        ui_event: &super::UIEvent,
+        graphics: &Graphics,
+    ) -> anyhow::Result<MenuEvent> {
         let _ = self.root.handle_event(ui_event, &graphics.queue);
 
         Ok(MenuEvent::None)
     }
 
-    fn update(
-        &mut self,
-        _graphics: &Graphics,
-    ) -> anyhow::Result<MenuEvent> {
-        use ServerControlStreamMessage::*;
+    fn update(&mut self, _graphics: &Graphics) -> anyhow::Result<MenuEvent> {
         use ClientControlStreamMessage::*;
+        use ServerControlStreamMessage::*;
 
         if self.server_state.is_shutdown() {
             return Ok(MenuEvent::SwitchToStart);
@@ -82,22 +82,36 @@ impl Menu for LoadGameMenu {
         for result in self.server_state.clone().receive_messages()? {
             let message: ProcessedMessage = match result {
                 Ok(Connected) => {
-                    let _ = self.server_state.clone().send_message(Login(AccountCredentials::new("Test".into(), "Test".into(), None)));
+                    let _ = self
+                        .server_state
+                        .clone()
+                        .send_message(Login(AccountCredentials::new(
+                            "Test".into(),
+                            "Test".into(),
+                            None,
+                        )));
                     ProcessedMessage::None
                 }
                 Ok(Authenticated(account_info)) => {
-                    let AccountInfo { characters, ..} = account_info;
+                    let AccountInfo { characters, .. } = account_info;
                     if characters.len() > 0 {
-                        let _ = self.server_state.clone().send_message(SelectCharacter(characters[0].character_id));
+                        let _ = self
+                            .server_state
+                            .clone()
+                            .send_message(SelectCharacter(characters[0].character_id));
                         // let _ = self.server_state.clone().send_message(CreateCharacter("TestCharacter".into()));
-                    }else {
-                        let _ = self.server_state.clone().send_message(CreateCharacter("TestCharacter".into()));
+                    } else {
+                        let _ = self
+                            .server_state
+                            .clone()
+                            .send_message(CreateCharacter("TestCharacter".into()));
                     }
                     ProcessedMessage::None
                 }
                 Ok(LoginDenied(reason)) => {
                     eprintln!("Client denied from logging in: {reason}");
-                    ProcessedMessage::None},
+                    ProcessedMessage::None
+                }
                 Ok(AccountCreateDenied(reason)) => {
                     eprintln!("Client denied from creating account: {reason}");
                     ProcessedMessage::None
@@ -105,28 +119,27 @@ impl Menu for LoadGameMenu {
                 Ok(CharacterSelected(character_id)) => {
                     println!("Character Selected: {character_id}");
                     ProcessedMessage::None
-                },
+                }
                 Ok(CharacterDenied(reason)) => {
                     eprintln!("Client denied from selecting character: {reason}");
                     ProcessedMessage::None
                 }
-                Ok(Disconnected(reason)) => {
-                    ProcessedMessage::Shutdown(reason)
+                Ok(Disconnected(reason)) => ProcessedMessage::Shutdown(reason),
+                Err(TryRecvError::Disconnected) => {
+                    ProcessedMessage::Shutdown("Client disconnected from server".into())
                 }
-                Err(TryRecvError::Disconnected) => ProcessedMessage::Shutdown("Client disconnected from server".into()),
                 Err(_) => ProcessedMessage::None,
             };
 
             match message {
-                ProcessedMessage::None => {},
+                ProcessedMessage::None => {}
                 ProcessedMessage::Shutdown(reason) => {
                     eprintln!("{reason}");
                     pollster::block_on(self.server_state.clone().shutdown());
                 }
             }
-
         }
-    
+
         Ok(MenuEvent::None)
     }
 }
@@ -177,17 +190,14 @@ impl Menu for GameMenu {
     }
 
     fn handle_input(
-            &mut self,
-            ui_event: &super::UIEvent,
-            graphics: &Graphics
-        ) -> anyhow::Result<MenuEvent> {
+        &mut self,
+        ui_event: &super::UIEvent,
+        graphics: &Graphics,
+    ) -> anyhow::Result<MenuEvent> {
         Ok(MenuEvent::None)
     }
 
-    fn update(
-        &mut self,
-        _graphics: &Graphics,
-    ) -> anyhow::Result<MenuEvent> {
+    fn update(&mut self, _graphics: &Graphics) -> anyhow::Result<MenuEvent> {
         Ok(MenuEvent::None)
     }
 }
