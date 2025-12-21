@@ -11,7 +11,7 @@ use rcgen::{CertifiedKey, KeyPair};
 use rustls::pki_types::PrivatePkcs8KeyDer;
 use sea_orm::Database;
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
-use tokio::sync::{Notify, watch};
+use tokio::sync::{watch};
 
 mod server_networking;
 mod state;

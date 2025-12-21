@@ -1,74 +1,23 @@
 use anyhow::anyhow;
 use bcrypt::{hash, verify};
-use dashmap::DashMap;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait,
     QueryFilter, sqlx::types::chrono,
 };
-use shared::{AccountCredentials, AccountInfo, ServerControlStreamMessage, accounts, characters};
+use shared::{AccountCredentials, AccountInfo, ChunkManager, ServerControlStreamMessage, accounts, characters};
 use std::{
     fs,
-    net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use crate::GameStartOption;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConnectionRole {
-    LocalMaster,
-    RemoteClient,
-}
-
-#[derive(Debug, Clone)]
-pub enum AuthState {
-    WaitingForCredentials,
-    Authenticated { username: String },
-    Rejected(String),
-}
-
-#[derive(Debug, Clone)]
-pub struct ServerSession {
-    pub role: ConnectionRole,
-    pub auth: AuthState,
-    pub addr: SocketAddr,
-    pub control_stream_opened: bool,
-}
-
-impl ServerSession {
-    pub fn new(addr: SocketAddr) -> Self {
-        let role = if addr.ip().is_loopback() {
-            ConnectionRole::LocalMaster
-        } else {
-            ConnectionRole::RemoteClient
-        };
-
-        Self {
-            role,
-            auth: AuthState::WaitingForCredentials,
-            addr,
-            control_stream_opened: false,
-        }
-    }
-}
-
-pub struct SessionManager {
-    pub sessions: DashMap<SocketAddr, Arc<tokio::sync::Mutex<ServerSession>>>,
-}
-
-impl SessionManager {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            sessions: DashMap::new(),
-        })
-    }
-}
+use crate::{GameStartOption, state::{AuthState, ServerSession, SessionManager}};
 
 pub struct GameManager {
     pub db: DatabaseConnection,
     pub session_manager: Arc<SessionManager>,
     pub game_dir: PathBuf,
+    pub chunk_manager: ChunkManager,
 }
 
 impl GameManager {
@@ -106,6 +55,7 @@ impl GameManager {
             db: db,
             session_manager: SessionManager::new(),
             game_dir,
+            chunk_manager: ChunkManager::new()?,
         }))
     }
 
@@ -139,7 +89,7 @@ impl GameManager {
         };
 
         match character.insert(&self.db).await {
-            Ok(model) => ServerControlStreamMessage::CharacterSelected(model.character_id),
+            Ok(model) => ServerControlStreamMessage::CharacterSelected,
             Err(e) => ServerControlStreamMessage::CharacterDenied(format!(
                 "Failed to create character: {e}"
             )),
@@ -158,7 +108,7 @@ impl GameManager {
             .await
         {
             Ok(Some(model)) => {
-                return ServerControlStreamMessage::CharacterSelected(model.character_id);
+                return ServerControlStreamMessage::CharacterSelected;
             }
             Ok(None) => {
                 return ServerControlStreamMessage::CharacterDenied(format!(

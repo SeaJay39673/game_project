@@ -1,6 +1,4 @@
 use std::{
-    any,
-    fs::read_to_string,
     net::SocketAddr,
     str::FromStr,
     sync::{Arc, Mutex},
@@ -12,16 +10,14 @@ use shared::{
     ClientControlStreamMessage, ServerControlStreamMessage, receive_message, send_message,
 };
 use tokio::sync::{
-    Notify,
     mpsc::{UnboundedReceiver, UnboundedSender, error::TryRecvError, unbounded_channel},
     watch,
 };
 
-use crate::{client_networking::get_single_player_endpoint, server_state};
+use crate::{client_networking::get_single_player_endpoint};
 
 pub struct ServerState {
     thread_manager: Arc<ThreadManager>,
-    shutdown: bool,
     client_tx: UnboundedSender<ClientControlStreamMessage>,
     server_rx: Mutex<UnboundedReceiver<ServerControlStreamMessage>>,
 }
@@ -49,7 +45,6 @@ impl ServerState {
     async fn start_forwarder(
         thread_manager: Arc<ThreadManager>,
         mut server_ready: watch::Receiver<bool>,
-        forwarder_ready: Arc<Notify>,
         server_tx: UnboundedSender<ServerControlStreamMessage>,
         mut client_rx: UnboundedReceiver<ClientControlStreamMessage>,
     ) {
@@ -156,11 +151,9 @@ impl ServerState {
 
         let (server_tx, server_rx) = unbounded_channel::<ServerControlStreamMessage>();
         let (client_tx, client_rx) = unbounded_channel::<ClientControlStreamMessage>();
-        let forwarder_ready = Arc::new(Notify::new());
         Self::start_forwarder(
             thread_manager.clone(),
             server_ready_rx,
-            forwarder_ready,
             server_tx,
             client_rx,
         )
@@ -168,7 +161,6 @@ impl ServerState {
 
         Arc::new(Self {
             thread_manager,
-            shutdown: false,
             client_tx,
             server_rx: Mutex::new(server_rx),
         })

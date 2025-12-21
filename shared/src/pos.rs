@@ -13,7 +13,7 @@ impl PlayerPos {
     }
 }
 
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Copy)]
 pub struct TilePos {
     pub x: i64,
     pub y: i64,
@@ -26,7 +26,7 @@ impl TilePos {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Copy)]
 pub struct ChunkPos {
     pub x: i64,
     pub y: i64,
@@ -35,5 +35,9 @@ pub struct ChunkPos {
 impl ChunkPos {
     pub fn new(x: i64, y: i64) -> Self {
         Self { x, y }
+    }
+
+    pub fn to_tile_pos(&self, size: usize) -> TilePos {
+        TilePos { x: self.x * size as i64, y: self.y * size as i64, z: 0 }
     }
 }

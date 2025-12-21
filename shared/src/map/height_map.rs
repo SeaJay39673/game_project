@@ -6,11 +6,11 @@ use std::{
 use anyhow::{Result, anyhow};
 use noise::{NoiseFn, Perlin};
 
-use crate::ChunkPos;
+use crate::{TilePos};
 
 static PERLIN: LazyLock<RwLock<Perlin>> = LazyLock::new(|| RwLock::new(Perlin::new(0)));
 
-pub fn generate_heightmap(postion: &ChunkPos, size: usize) -> Result<HashMap<(i64, i64), i64>> {
+pub fn generate_heightmap(postion: &TilePos, size: usize) -> Result<HashMap<(i64, i64), i64>> {
     let scale = 0.025;
 
     let mut height_map: HashMap<(i64, i64), i64> = HashMap::new();

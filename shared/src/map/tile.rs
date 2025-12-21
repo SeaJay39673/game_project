@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{TilePos};
 
-#[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum TileKind {
     Grass,
     Stone,
@@ -10,14 +10,14 @@ pub enum TileKind {
     Water,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum TileType {
     Block,
     SlopeL,
     SlopeR,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Tile {
     pub tile_kind: TileKind,
     pub tile_type: TileType,

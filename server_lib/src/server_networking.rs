@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use quinn::{Connection, Incoming, RecvStream, SendStream};
 use shared::{
-    ClientControlStreamMessage, ServerControlStreamMessage, receive_message, send_message,
+    ChunkPos, ClientControlStreamMessage, ServerControlStreamMessage, receive_message, send_message,
 };
 
 use crate::{
@@ -67,6 +67,13 @@ pub async fn handle_control_stream(
                                     eprintln!("Could not deny client character creation: {e}");
                                 }
                             }
+                        }
+                    }
+                    Ok(JoinWorldRequest) => {
+                        if let Err(e) = send_message(send, ServerControlStreamMessage::    InitialWorld {
+                            chunks: game_manager.chunk_manager.get_chunks_radius(ChunkPos::new(0, 0), 1),
+                        }).await {
+                            eprintln!("Error sending initial chunk data to client: {e}");
                         }
                     }
                     Err(e) => {
