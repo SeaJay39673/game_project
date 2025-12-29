@@ -1,19 +1,19 @@
 use std::{mem, sync::Arc};
 
+use anyhow::anyhow;
+
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BufferAddress,
-    BufferBindingType, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Instance, LoadOp,
-    Operations, PipelineLayoutDescriptor, Queue, RenderPassColorAttachment, RenderPassDescriptor,
+    Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Instance, LoadOp, Operations,
+    PipelineLayoutDescriptor, Queue, RenderPass, RenderPassColorAttachment, RenderPassDescriptor,
     RenderPipeline, RequestAdapterOptions, SamplerBindingType, ShaderModuleDescriptor,
     ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureSampleType,
-    TextureViewDescriptor, TextureViewDimension, VertexAttribute, VertexBufferLayout, VertexFormat,
-    VertexStepMode,
+    TextureViewDescriptor, TextureViewDimension, VertexBufferLayout, VertexStepMode,
+    vertex_attr_array,
 };
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{asset_ingestion::load_assets, engine::{Drawable, graphics_data::Vertex}};
-
-use anyhow::{anyhow, bail};
+use crate::mesh::{InstanceData, VertexData};
 
 pub struct Graphics {
     pub surface: Surface<'static>,
@@ -21,8 +21,7 @@ pub struct Graphics {
     pub queue: Queue,
     pub config: SurfaceConfiguration,
     pub pipeline: RenderPipeline,
-    pub tile_bind_group_layout: BindGroupLayout,
-    pub camera_bind_group_layout: BindGroupLayout,
+    pub texture_layout: BindGroupLayout,
 }
 
 impl Graphics {
@@ -42,7 +41,7 @@ impl Graphics {
 
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Game Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shader/shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
         });
 
         let config = if let Some(config) = surface.get_default_config(&adapter, width, height) {
@@ -53,66 +52,32 @@ impl Graphics {
 
         surface.configure(&device, &config);
 
-        let camera_bind_group_layout =
+        let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                label: Some("Texture Bind Group Layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        count: None,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Texture {
+                            sample_type: TextureSampleType::Float { filterable: true },
+                            view_dimension: TextureViewDimension::D2,
+                            multisampled: false,
+                        },
                     },
-                    count: None,
-                }],
-                label: Some("Camera Bind Group Layout"),
+                    BindGroupLayoutEntry {
+                        binding: 1,
+                        count: None,
+                        visibility: ShaderStages::FRAGMENT,
+                        ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                    },
+                ],
             });
-
-        let tile_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Tile Bind Group Layout"),
-            entries: &[
-                BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: TextureViewDimension::D2,
-                        sample_type: TextureSampleType::Float { filterable: true },
-                    },
-                    count: None,
-                },
-                BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[&tile_bind_group_layout],
+            bind_group_layouts: &[&texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -122,15 +87,28 @@ impl Graphics {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[VertexBufferLayout {
-                    array_stride: mem::size_of::<Vertex>() as BufferAddress,
-                    step_mode: VertexStepMode::Vertex,
-                    attributes: &[VertexAttribute {
-                        offset: 0,
-                        shader_location: 0,
-                        format: VertexFormat::Float32x2,
-                    }],
-                }],
+                buffers: &[
+                    VertexBufferLayout {
+                        array_stride: mem::size_of::<VertexData>() as BufferAddress,
+                        step_mode: VertexStepMode::Vertex,
+                        attributes: &vertex_attr_array![
+                            0 => Float32x3,
+                            1 => Float32x2,
+                            2 => Unorm8x4,
+                        ],
+                    },
+                    VertexBufferLayout {
+                        array_stride: mem::size_of::<InstanceData>() as BufferAddress,
+                        step_mode: VertexStepMode::Instance,
+                        attributes: &vertex_attr_array![
+                            3 => Float32x4,
+                            4 => Float32x4,
+                            5 => Float32x4,
+                            6 => Float32x4,
+                            7 => Unorm8x4,
+                        ],
+                    },
+                ],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -153,16 +131,13 @@ impl Graphics {
             cache: None,
         });
 
-        load_assets("src/assets/assets.json")?;
-
         Ok(Self {
             surface,
             device,
             queue,
             config,
             pipeline,
-            tile_bind_group_layout,
-            camera_bind_group_layout,
+            texture_layout: texture_bind_group_layout,
         })
     }
 
@@ -175,15 +150,15 @@ impl Graphics {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render(&mut self, drawables: &[&dyn Drawable]) -> anyhow::Result<()> {
+    pub fn render(&mut self, renderable: Option<&dyn Renderable>) -> anyhow::Result<()> {
         let frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,
             Err(SurfaceError::Lost) => {
                 self.resize(self.config.width, self.config.height);
                 return Ok(());
             }
-            Err(SurfaceError::OutOfMemory) => bail!("Out of GPU Memory"),
-            Err(_) => return Ok(()),
+            Err(SurfaceError::OutOfMemory) => return Err(anyhow!("Out of GPU memory!")),
+            Err(e) => return Err(anyhow!("Graphics SurfaceError: {e}")),
         };
 
         let view = frame.texture.create_view(&TextureViewDescriptor::default());
@@ -217,8 +192,8 @@ impl Graphics {
             });
 
             render_pass.set_pipeline(&self.pipeline);
-            for drawable in drawables {
-                drawable.render(&mut render_pass);
+            if let Some(renderable) = renderable {
+                renderable.render(&mut render_pass);
             }
         }
 
@@ -227,4 +202,8 @@ impl Graphics {
 
         Ok(())
     }
+}
+
+pub trait Renderable {
+    fn render(&self, render_pass: &mut RenderPass);
 }

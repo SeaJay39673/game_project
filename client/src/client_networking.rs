@@ -7,8 +7,6 @@ use rustls::{
     pki_types::{CertificateDer, ServerName, UnixTime},
 };
 
-use anyhow::anyhow;
-
 #[derive(Debug)]
 pub struct AllowAnyLocalhostCert;
 

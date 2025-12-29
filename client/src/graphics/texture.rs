@@ -1,16 +1,27 @@
 use wgpu::{
-    AddressMode, Device, Extent3d, FilterMode, Origin3d, Queue, Sampler, SamplerDescriptor,
-    TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    AddressMode, BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Extent3d,
+    FilterMode, Origin3d, Sampler, SamplerDescriptor, TexelCopyBufferLayout, TexelCopyTextureInfo,
+    TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureView,
+    TextureViewDescriptor,
 };
+
+use crate::graphics::Graphics;
 
 pub struct Texture {
     pub view: TextureView,
     pub sampler: Sampler,
+    pub bind_group: BindGroup,
 }
 
 impl Texture {
-    pub fn from_file(device: &Device, queue: &Queue, path: &str) -> anyhow::Result<Self> {
+    pub fn from_file(graphics: &Graphics, path: &str) -> anyhow::Result<Self> {
+        let Graphics {
+            device,
+            queue,
+            texture_layout,
+            ..
+        } = graphics;
+
         let img = image::open(path)?.to_rgba8();
         let (width, height) = img.dimensions();
 
@@ -42,7 +53,7 @@ impl Texture {
             TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * width),
-                rows_per_image: Some(4 * height),
+                rows_per_image: Some(height),
             },
             texture_size,
         );
@@ -57,16 +68,39 @@ impl Texture {
             ..Default::default()
         });
 
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Texture Bind Group"),
+            layout: texture_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&texture_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
         Ok(Self {
             view: texture_view,
             sampler,
+            bind_group,
         })
     }
 
-    pub fn from_color(device: &Device, queue: &Queue, color: &[u8; 4]) -> Self {
+    pub fn from_color(graphics: &Graphics, color: &[u8; 4], width: u32, height: u32) -> Self {
+        let Graphics {
+            device,
+            queue,
+            texture_layout,
+            ..
+        } = graphics;
+
         let size = Extent3d {
-            width: 1,
-            height: 1,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
 
@@ -100,9 +134,25 @@ impl Texture {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
 
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Texture Bind Group"),
+            layout: texture_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(&view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
         Self {
             view,
             sampler,
+            bind_group,
         }
     }
 }

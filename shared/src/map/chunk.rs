@@ -22,7 +22,6 @@ impl Chunk {
             let tile: Tile = Tile {
                 position,
                 tile_kind: super::TileKind::Grass,
-                tile_type: super::TileType::Block,
             };
             tiles.insert(position, tile);
         });

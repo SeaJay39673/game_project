@@ -1,13 +1,11 @@
 use crate::game::Game;
 use anyhow::anyhow;
 
-mod asset_ingestion;
 mod client_networking;
-mod engine;
 mod game;
-mod game_state;
+mod graphics;
+mod mesh;
 mod server_state;
-mod ui;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

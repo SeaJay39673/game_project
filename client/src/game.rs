@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet},
+    collections::HashSet,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,11 +12,7 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use crate::{
-    asset_ingestion::load_assets,
-    engine::Graphics,
-    ui::{Menu, MenuManager, UIEvent},
-};
+use crate::{graphics::Graphics, mesh::ChunkMeshes};
 
 struct GameManager {
     last_frame: Instant,
@@ -31,7 +27,7 @@ struct GameManager {
     pressed_keys: HashSet<SmolStr>,
     cursor_location: (f32, f32),
 
-    menu: Option<MenuManager>,
+    chunks: Option<ChunkMeshes>,
 }
 
 impl GameManager {
@@ -48,8 +44,7 @@ impl GameManager {
             pressed_named_keys: HashSet::new(),
             pressed_keys: HashSet::new(),
             cursor_location: (0.0, 0.0),
-
-            menu: None,
+            chunks: None,
         })
     }
 
@@ -106,12 +101,6 @@ impl ApplicationHandler for GameManager {
         let now = Instant::now();
         let next_frame_time = self.last_frame + self.target_frame_duration;
 
-        if let (Some(graphics), Some(menu)) = (&self.graphics, &mut self.menu) {
-            if let Err(e) = menu.update(graphics) {
-                eprintln!("Error updating menu: {e}");
-            }
-        } 
-
         if now >= next_frame_time || matches!(cause, StartCause::Init) {
             if let Some(window) = &self.window {
                 window.request_redraw();
@@ -148,19 +137,20 @@ impl ApplicationHandler for GameManager {
             }
         }
 
-        if self.menu.is_none() {
-            if let (Some(window), Some(graphics)) = (&self.window, &self.graphics) {
-                let size = window.inner_size();
-                match MenuManager::new(graphics, (size.width as f32, size.height as f32), self.cursor_location) {
-                    Ok(menu) => self.menu = Some(menu),
-                    Err(e) => panic!("Could not create MenuManager: {e}"),
+        if self.chunks.is_none()
+            && let Some(graphics) = &self.graphics
+        {
+            match ChunkMeshes::new(graphics, 1, 8, 0.1) {
+                Ok(meshes) => self.chunks = Some(meshes),
+                Err(e) => {
+                    eprintln!("Could not create chunk meshes: {e}")
                 }
-            }
+            };
         }
 
         if self.graphics.is_some()
-            && self.menu.is_some()
-            && let Some(ref window) = self.window
+            && self.chunks.is_some()
+            && let Some(window) = &self.window
         {
             window.set_visible(true);
         }
@@ -188,35 +178,22 @@ impl ApplicationHandler for GameManager {
                 position,
             } => {
                 self.handle_cursor_location((position.x as f32, position.y as f32));
-                if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    let _ = menu.handle_input(&UIEvent::MouseMoved(self.cursor_location.0, self.cursor_location.1), graphics);
-                }
             }
             WindowEvent::MouseInput {
                 device_id: _,
                 state,
                 button,
-            } => {
-                if let (Some(graphics), Some(menu)) =
-                    (&mut self.graphics, &mut self.menu)
-                {
-                    let _ = menu.handle_input(&UIEvent::MouseClicked { position: self.cursor_location, state, button }, graphics);
-                }
-            }
+            } => {}
             WindowEvent::RedrawRequested => {
-                if let (Some(graphics), Some(menu)) = (&mut self.graphics, &mut self.menu) {
-                    if let Err(e) = graphics.render(&[menu]) {
-                        eprintln!("Could not render menu: {e}")
-                    }
+                if let (Some(graphics), Some(chunks)) = (&mut self.graphics, &self.chunks) {
+                    if let Err(e) = graphics.render(Some(chunks)) {
+                        eprintln!("Error rendering chunks: {e}");
+                    };
                 }
             }
             WindowEvent::Resized(size) => {
                 if let Some(ref mut graphics) = self.graphics {
                     graphics.resize(size.width, size.height);
-                    let Graphics { queue, .. } = graphics;
-                    if let Some(ref mut menu) = self.menu {
-                        menu.handle_resize(queue, size.width as f32, size.height as f32);
-                    }
                 }
             }
             _ => {}

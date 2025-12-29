@@ -765,6 +765,7 @@ dependencies = [
  "bytemuck",
  "glam",
  "image",
+ "noise",
  "pollster",
  "quinn",
  "rustls",
