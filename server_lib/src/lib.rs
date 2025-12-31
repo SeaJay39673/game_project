@@ -11,7 +11,7 @@ use rcgen::{CertifiedKey, KeyPair};
 use rustls::pki_types::PrivatePkcs8KeyDer;
 use sea_orm::Database;
 use std::{fs, net::SocketAddr, path::Path, sync::Arc};
-use tokio::sync::{watch};
+use tokio::sync::watch;
 
 mod server_networking;
 mod state;
@@ -59,15 +59,7 @@ pub async fn start_single_player(
     ready: watch::Sender<bool>,
     thread_manager: Arc<ThreadManager>,
 ) -> anyhow::Result<()> {
-
-    let data_path = Path::new("src/data");
-    if !data_path.exists() {
-        fs::create_dir(data_path)?;
-    }
-    
-    let db = Database::connect("sqlite://src/data/db.sqlite?mode=rwc").await?;
-    Migrator::up(&db, None).await?;
-    let game_manager = GameManager::new(db.clone(), option)?;
+    let game_manager = GameManager::new(option).await?;
 
     let addr: SocketAddr = "127.0.0.1:5250".parse()?;
 
@@ -88,8 +80,6 @@ pub async fn start_single_player(
     let _ = ready.send(true)?;
 
     run_accept_loop(endpoint.clone(), thread_manager, game_manager).await;
-
-    drop(db);
 
     Ok(())
 }

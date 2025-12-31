@@ -3,6 +3,7 @@ use anyhow::anyhow;
 
 mod client_networking;
 mod game;
+mod game_state;
 mod graphics;
 mod mesh;
 mod server_state;

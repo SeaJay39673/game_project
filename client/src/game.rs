@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
     sync::Arc,
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -12,7 +13,7 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use crate::{graphics::Graphics, mesh::ChunkMeshes};
+use crate::{game_state::ServerState, graphics::Graphics, mesh::ChunkMeshes};
 
 struct GameManager {
     last_frame: Instant,
@@ -28,10 +29,14 @@ struct GameManager {
     cursor_location: (f32, f32),
 
     chunks: Option<ChunkMeshes>,
+
+    server_state: ServerState,
 }
 
 impl GameManager {
     pub async fn new() -> anyhow::Result<Self> {
+        let server_state = pollster::block_on(ServerState::new());
+
         Ok(Self {
             last_frame: Instant::now(),
             target_frame_duration: Duration::from_secs_f64(1.0 / 120.0),
@@ -45,6 +50,7 @@ impl GameManager {
             pressed_keys: HashSet::new(),
             cursor_location: (0.0, 0.0),
             chunks: None,
+            server_state,
         })
     }
 

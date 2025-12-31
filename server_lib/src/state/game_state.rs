@@ -1,17 +1,23 @@
 use anyhow::anyhow;
 use bcrypt::{hash, verify};
+use migration::{Migrator, MigratorTrait};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait,
-    QueryFilter, sqlx::types::chrono,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Database, DatabaseConnection, EntityTrait,
+    ModelTrait, QueryFilter, sqlx::types::chrono,
 };
-use shared::{AccountCredentials, AccountInfo, ChunkManager, ServerControlStreamMessage, accounts, characters};
+use shared::{
+    AccountCredentials, AccountInfo, ChunkManager, ServerControlStreamMessage, accounts, characters,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use crate::{GameStartOption, state::{AuthState, ServerSession, SessionManager}};
+use crate::{
+    GameStartOption,
+    state::{AuthState, ServerSession, SessionManager},
+};
 
 pub struct GameManager {
     pub db: DatabaseConnection,
@@ -21,7 +27,7 @@ pub struct GameManager {
 }
 
 impl GameManager {
-    pub fn new(db: DatabaseConnection, option: GameStartOption) -> anyhow::Result<Arc<Self>> {
+    pub async fn new(option: GameStartOption) -> anyhow::Result<Arc<Self>> {
         let data_path = Path::new("src/data");
         if !data_path.exists() {
             fs::create_dir(data_path)?;
@@ -50,6 +56,13 @@ impl GameManager {
                 path
             }
         };
+
+        let db = Database::connect(format!(
+            "sqlite://{}/db.sqlite?mode=rwc",
+            game_dir.to_string_lossy().to_string()
+        ))
+        .await?;
+        Migrator::up(&db, None).await?;
 
         Ok(Arc::new(Self {
             db: db,
