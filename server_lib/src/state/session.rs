@@ -38,6 +38,9 @@ impl ServerSession {
             control_stream_opened: false,
         }
     }
+    pub fn is_authed(&self) -> bool {
+        matches!(self.auth, AuthState::Authenticated { .. })
+    }
 }
 
 pub struct SessionManager {

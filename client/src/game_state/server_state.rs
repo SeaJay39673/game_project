@@ -6,9 +6,9 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use crate::client_networking;
 
 pub struct ServerState {
-    thread_manager: Arc<ThreadManager>,
-    client_tx: UnboundedSender<shared::ClientControlStreamMessage>,
-    server_rx: UnboundedReceiver<shared::ServerControlStreamMessage>,
+    pub thread_manager: Arc<ThreadManager>,
+    pub client_tx: UnboundedSender<shared::ClientControlStreamMessage>,
+    pub server_rx: UnboundedReceiver<shared::ServerControlStreamMessage>,
 }
 
 impl ServerState {
@@ -22,7 +22,7 @@ impl ServerState {
                 let thread_manager = thread_manager.clone();
                 move || async move {
                     if let Err(e) = server_lib::start_single_player(
-                        server_lib::GameStartOption::NewGame("blah".into()),
+                        server_lib::GameStartOption::LoadGame("blah".into()),
                         ready_tx,
                         child,
                     )
@@ -58,7 +58,7 @@ impl ServerState {
                             return;
                         }
                     };
-                    let addr = match SocketAddr::from_str("107.0.0.1:5250") {
+                    let addr = match SocketAddr::from_str("127.0.0.1:5250") {
                         Ok(addr) => addr,
                         Err(e) => {
                             eprintln!("Failed to parse socket address for server: {e}");
@@ -91,6 +91,12 @@ impl ServerState {
                         }
                     };
 
+                    if let Err(e) = shared::send_message(&mut send, shared::ClientControlStreamMessage::ConnectionRequest).await {
+                        eprintln!("Failed to send connection request to server: {e}");
+                        thread_manager.shutdown().await;
+                        return;
+                    }
+
                     loop {
                         tokio::select! {
                             _ = thread_manager.await_cancel() => {
@@ -106,6 +112,8 @@ impl ServerState {
                                     },
                                     Err(e) => {
                                         eprintln!("Error receiving message from server: {e}");
+                                        thread_manager.shutdown().await;
+                                        break;
                                     }
                                 }
                             }

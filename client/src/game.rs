@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     sync::Arc,
-    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -13,7 +12,7 @@ use winit::{
     window::{Fullscreen, Window},
 };
 
-use crate::{game_state::ServerState, graphics::Graphics, mesh::ChunkMeshes};
+use crate::{game_state::GameState, graphics::Graphics};
 
 struct GameManager {
     last_frame: Instant,
@@ -28,15 +27,11 @@ struct GameManager {
     pressed_keys: HashSet<SmolStr>,
     cursor_location: (f32, f32),
 
-    chunks: Option<ChunkMeshes>,
-
-    server_state: ServerState,
+    game_state: Option<GameState>,
 }
 
 impl GameManager {
     pub async fn new() -> anyhow::Result<Self> {
-        let server_state = pollster::block_on(ServerState::new());
-
         Ok(Self {
             last_frame: Instant::now(),
             target_frame_duration: Duration::from_secs_f64(1.0 / 120.0),
@@ -49,8 +44,7 @@ impl GameManager {
             pressed_named_keys: HashSet::new(),
             pressed_keys: HashSet::new(),
             cursor_location: (0.0, 0.0),
-            chunks: None,
-            server_state,
+            game_state: None,
         })
     }
 
@@ -107,6 +101,10 @@ impl ApplicationHandler for GameManager {
         let now = Instant::now();
         let next_frame_time = self.last_frame + self.target_frame_duration;
 
+        if let (Some(graphics), Some(game_state)) = (&self.graphics, &mut self.game_state) {
+            game_state.update(graphics);
+        }
+
         if now >= next_frame_time || matches!(cause, StartCause::Init) {
             if let Some(window) = &self.window {
                 window.request_redraw();
@@ -143,19 +141,19 @@ impl ApplicationHandler for GameManager {
             }
         }
 
-        if self.chunks.is_none()
+        if self.game_state.is_none()
             && let Some(graphics) = &self.graphics
         {
-            match ChunkMeshes::new(graphics, 1, 8, 0.1) {
-                Ok(meshes) => self.chunks = Some(meshes),
+            match pollster::block_on(GameState::new(graphics)) {
+                Ok(game_state) => self.game_state = Some(game_state),
                 Err(e) => {
-                    eprintln!("Could not create chunk meshes: {e}")
+                    eprintln!("Could not create game state: {e}");
                 }
-            };
+            }
         }
 
-        if self.graphics.is_some()
-            && self.chunks.is_some()
+        if self.game_state.is_some()
+            && self.graphics.is_some()
             && let Some(window) = &self.window
         {
             window.set_visible(true);
@@ -191,10 +189,10 @@ impl ApplicationHandler for GameManager {
                 button,
             } => {}
             WindowEvent::RedrawRequested => {
-                if let (Some(graphics), Some(chunks)) = (&mut self.graphics, &self.chunks) {
-                    if let Err(e) = graphics.render(Some(chunks)) {
-                        eprintln!("Error rendering chunks: {e}");
-                    };
+                if let (Some(graphics), Some(game_state)) = (&mut self.graphics, &self.game_state) {
+                    if let Err(e) = graphics.render(Some(game_state)) {
+                        eprintln!("Error rendering graphics: {e}");
+                    }
                 }
             }
             WindowEvent::Resized(size) => {

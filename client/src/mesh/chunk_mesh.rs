@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use glam::{Mat4, Vec3};
+use shared::Chunk;
 use std::{collections::BTreeMap, sync::Arc};
 use wgpu::Device;
 
@@ -14,14 +15,60 @@ pub struct ChunkMesh {
 }
 
 impl ChunkMesh {
-    pub fn new(
-        device: &Device,
-        pos: [i64; 2],
-        chunk_spacing: u8,
-        size: u8,
-        scale: f32,
-        texture: Arc<Texture>,
-    ) -> anyhow::Result<Self> {
+    // pub fn new(
+    //     device: &Device,
+    //     pos: [i64; 2],
+    //     chunk_spacing: u8,
+    //     size: u8,
+    //     scale: f32,
+    //     texture: Arc<Texture>,
+    // ) -> anyhow::Result<Self> {
+    //     let mut vertices: Vec<VertexData> = vec![];
+    //     let mesh_data = TileMesh::to_mesh_data();
+    //     vertices.extend_from_slice(&mesh_data.vertices);
+    //     let indices = if let Some(indices) = mesh_data.indices {
+    //         Some(indices)
+    //     } else {
+    //         None
+    //     };
+
+    //     let transform_scale = Mat4::from_scale(Vec3::new(scale, scale, 0.0));
+
+    //     let mut instances: Vec<InstanceData> = vec![];
+
+    //     let mut sorted_instances: BTreeMap<(i64, i64, i64), InstanceData> = BTreeMap::new();
+
+    //     let height_map = generate_heightmap(
+    //         &(pos[0] * chunk_spacing as i64, pos[1] * chunk_spacing as i64),
+    //         size,
+    //     )?;
+
+    //     for ((x, y), z) in height_map.into_iter() {
+    //         for z in 0..=z {
+    //             let pos = (-x, -y, z);
+    //             let x = x as f32;
+    //             let y = y as f32;
+    //             let z = z as f32;
+    //             let model = Mat4::from_translation(Vec3 {
+    //                 x: (x - y) * scale,
+    //                 y: (x + y) * 0.5 * scale + (z * scale),
+    //                 z: 0.0,
+    //             }) * transform_scale;
+    //             let data = InstanceData::new(model, [255, 255, 255, 255]);
+    //             sorted_instances.insert(pos, data);
+    //         }
+    //     }
+
+    //     instances.extend(sorted_instances.values());
+
+    //     let instance_mesh = InstanceMesh::new(device, &vertices, indices, &instances);
+
+    //     Ok(Self {
+    //         instance_mesh: instance_mesh,
+    //         texture,
+    //     })
+    // }
+    pub fn new(device: &Device, chunk: Chunk, texture: Arc<Texture>, scale: f32) -> Self {
         let mut vertices: Vec<VertexData> = vec![];
         let mesh_data = TileMesh::to_mesh_data();
         vertices.extend_from_slice(&mesh_data.vertices);
@@ -30,42 +77,31 @@ impl ChunkMesh {
         } else {
             None
         };
-
         let transform_scale = Mat4::from_scale(Vec3::new(scale, scale, 0.0));
-
         let mut instances: Vec<InstanceData> = vec![];
-
         let mut sorted_instances: BTreeMap<(i64, i64, i64), InstanceData> = BTreeMap::new();
-
-        let height_map = generate_heightmap(
-            &(pos[0] * chunk_spacing as i64, pos[1] * chunk_spacing as i64),
-            size,
-        )?;
-
-        for ((x, y), z) in height_map.into_iter() {
-            for z in 0..=z {
-                let pos = (-x, -y, z);
-                let x = x as f32;
-                let y = y as f32;
-                let z = z as f32;
-                let model = Mat4::from_translation(Vec3 {
-                    x: (x - y) * scale,
-                    y: (x + y) * 0.5 * scale + (z * scale),
-                    z: 0.0,
-                }) * transform_scale;
-                let data = InstanceData::new(model, [255, 255, 255, 255]);
-                sorted_instances.insert(pos, data);
-            }
+        for (tile_pos, _tile) in chunk.tiles {
+            let pos = (-tile_pos.x, -tile_pos.y, tile_pos.z);
+            let x = tile_pos.x as f32;
+            let y = tile_pos.y as f32;
+            let z = tile_pos.z as f32;
+            let model = Mat4::from_translation(Vec3 {
+                x: (x - y) * scale,
+                y: (x + y) * 0.5 * scale + (z * scale),
+                z: 0.0,
+            }) * transform_scale;
+            let data = InstanceData::new(model, [255, 255, 255, 255]);
+            sorted_instances.insert(pos, data);
         }
 
         instances.extend(sorted_instances.values());
 
         let instance_mesh = InstanceMesh::new(device, &vertices, indices, &instances);
 
-        Ok(Self {
-            instance_mesh: instance_mesh,
+        Self {
+            instance_mesh,
             texture,
-        })
+        }
     }
 }
 

@@ -43,8 +43,8 @@ impl ChunkPos {
 
     pub fn to_tile_pos(&self, size: usize) -> TilePos {
         TilePos {
-            x: self.x * size as i64,
-            y: self.y * size as i64,
+            x: self.x * (size * 2 + 1) as i64,
+            y: self.y * (size * 2 + 1) as i64,
             z: 0,
         }
     }

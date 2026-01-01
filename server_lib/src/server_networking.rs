@@ -38,8 +38,7 @@ pub async fn handle_control_stream(
                         send_message(send, message).await?;
                     }
                     Ok(SelectCharacter(id)) => {
-                        let session_guard = session.lock().await;
-                        match session_guard.auth.clone() {
+                        match session.lock().await.auth.clone() {
                             AuthState::Authenticated{ username } => {
                                 let msg = game_manager.select_character(username, id).await;
                                 if let Err(e) = send_message(send, msg).await {
@@ -54,8 +53,7 @@ pub async fn handle_control_stream(
                         }
                     }
                     Ok(CreateCharacter(character_name)) => {
-                        let session_guard = session.lock().await;
-                        match session_guard.auth.clone() {
+                        match session.lock().await.auth.clone() {
                             AuthState::Authenticated{ username } => {
                                 let msg = game_manager.create_character(username, character_name).await;
                                 if let Err(e) = send_message(send, msg).await {
@@ -70,10 +68,16 @@ pub async fn handle_control_stream(
                         }
                     }
                     Ok(JoinWorldRequest) => {
-                        if let Err(e) = send_message(send, ServerControlStreamMessage::    InitialWorld {
-                            chunks: game_manager.chunk_manager.get_chunks_radius(ChunkPos::new(0, 0), 1),
-                        }).await {
-                            eprintln!("Error sending initial chunk data to client: {e}");
+                        if session.lock().await.is_authed() {
+                            if let Err(e) = send_message(send, ServerControlStreamMessage::InitialWorld {
+                                chunks: game_manager.chunk_manager.get_chunks_radius(ChunkPos::new(0, 0), 2),
+                            }).await {
+                                eprintln!("Error sending initial chunk data to client: {e}");
+                            }
+                        } else {
+                            if let Err(e) = send_message(send, ServerControlStreamMessage::CharacterDenied("User not authenticated".into())).await {
+                                eprintln!("Could not deny client join world request: {e}");
+                            }
                         }
                     }
                     Err(e) => {
@@ -84,6 +88,11 @@ pub async fn handle_control_stream(
             }
         }
     }
+
+    game_manager
+        .session_manager
+        .sessions
+        .remove(&session.lock().await.addr.clone());
 
     Ok(())
 }

@@ -1,5 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use shared::{Chunk, ChunkPos};
+use wgpu::Device;
+
 use crate::{
     graphics::{Graphics, Renderable, Texture},
     mesh::ChunkMesh,
@@ -7,38 +10,23 @@ use crate::{
 
 pub struct ChunkMeshes {
     meshes: BTreeMap<(i64, i64), ChunkMesh>,
+    texture: Arc<Texture>,
 }
 
 impl ChunkMeshes {
-    pub fn new(
-        graphics: &Graphics,
-        chunks_radius: u8,
-        chunk_size: u8,
-        scale: f32,
-    ) -> anyhow::Result<Self> {
-        let mut meshes: BTreeMap<(i64, i64), ChunkMesh> = BTreeMap::new();
-
-        let texture = Arc::new(Texture::from_file(graphics, "src/assets/grass_block.png")?);
-
-        let size_i64 = chunks_radius as i64;
-
-        for x in -(size_i64)..=size_i64 {
-            for y in -(size_i64)..=size_i64 {
-                meshes.insert(
-                    (-x, -y),
-                    ChunkMesh::new(
-                        &graphics.device,
-                        [x, y],
-                        chunk_size * 2 + 1,
-                        chunk_size,
-                        scale,
-                        texture.clone(),
-                    )?,
-                );
-            }
-        }
-
-        Ok(Self { meshes })
+    pub fn new(graphics: &Graphics) -> anyhow::Result<Self> {
+        let texture: Arc<Texture> =
+            Arc::new(Texture::from_file(graphics, "src/assets/grass_block.png")?);
+        Ok(Self {
+            meshes: BTreeMap::new(),
+            texture,
+        })
+    }
+    pub fn insert(&mut self, device: &Device, chunk_pos: ChunkPos, chunk: Chunk) {
+        self.meshes.insert(
+            (-chunk_pos.x, -chunk_pos.y),
+            ChunkMesh::new(device, chunk, self.texture.clone(), 0.1),
+        );
     }
 }
 
